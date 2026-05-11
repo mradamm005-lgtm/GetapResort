@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="hy">
+  <head>
+    <script>
+      /* ─────────────────────────────────────────────────────────────────────
+         iOS Safari fix — runs before ANYTHING else (before CSS, before React)
+         Root cause: Framer Motion continuously re-sets will-change:transform
+         and transform:scale(...) as inline styles at 60fps via MotionValues.
+         Even CSS !important can be raced by RAF updates in some Safari builds.
+         Solution: intercept CSSStyleDeclaration prototype setters so
+         will-change:transform and large scale transforms never reach the GPU
+         compositor on iOS, preventing the black texture overflow bug.
+         ───────────────────────────────────────────────────────────────────── */
+      (function () {
+        var ua  = navigator.userAgent;
+        var ios = /iPad|iPhone|iPod/.test(ua) ||
+                  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        window._isIOS = ios;
+        if (!ios) return;
+
+        document.documentElement.classList.add('is-ios');
+
+        try {
+          /* ── Block will-change: transform on all elements ── */
+          var wcd = Object.getOwnPropertyDescriptor(
+                      CSSStyleDeclaration.prototype, 'willChange');
+          if (wcd && wcd.set) {
+            Object.defineProperty(CSSStyleDeclaration.prototype, 'willChange', {
+              get: wcd.get,
+              set: function (v) {
+                /* Framer Motion sets this at 60fps; silently drop it on iOS */
+                if (typeof v === 'string' && v.indexOf('transform') !== -1) return;
+                wcd.set.call(this, v);
+              },
+              configurable: true
+            });
+          }
+        } catch (e) { /* silently ignore — CSS !important is still the fallback */ }
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title>Getap Resort &amp; Spa — Arzni, Armenia</title>
+    <meta name="description" content="Հանգստի ու բուժման կենտրոն Արզնիում, Երևանից 16 կմ հեռու։ Շքեղ սենյակներ, Spa, ռեստորան, ջեռուցվող լողավազան։" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,600&family=Noto+Serif+Armenian:wght@400;500;600;700&family=Noto+Sans+Armenian:wght@300;400;500;600&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <script>
+      /* ── Yandex Taxi deep-link ── */
+      function openTaxiToGetap() {
+        var deepLink = "yandextaxi://route?end-lat=40.31265&end-lon=44.58835&end-address=Getap%20Resort";
+        var fallback  = "https://yandex.com/maps/?rtext=~40.31265,44.58835&rtt=auto";
+        window.location.href = deepLink;
+        setTimeout(function () { window.location.href = fallback; }, 1200);
+      }
+      document.addEventListener('click', function (e) {
+        var link = e.target.closest('a[href*="appmetrica.yandex.com"], a[href*="redirect.appmetrica"]');
+        if (link) { e.preventDefault(); e.stopPropagation(); openTaxiToGetap(); }
+      }, true);
+
+      /* ── Pool photo carousels ── */
+      (function () {
+        var OUTDOOR = [
+          '/assets/Getap__8_(1)_1777893382113.JPG',
+          '/assets/Getap__78_1777893382177.JPG',
+          '/assets/Getap__7_(3)_1777893382209.JPG'
+        ];
+        var INDOOR = [
+          '/assets/Getap__62_(1)_1777893382247.JPG',
+          '/assets/Getap__61_(1)_1777893382313.JPG',
+          '/assets/Getap__65_(3)_1777893382351.JPG',
+          '/assets/Getap__63_(2)_1777893382393.JPG',
+          '/assets/Getap__64_(2)_1777893382437.JPG'
+        ];
+        var SAUNA = [
+          '/assets/Getap__79_(3)_1778166649823.JPG'
+        ];
+
+        function buildCarousel(section, newPhotos) {
+          if (section.__carouselDone) return;
+          var parallaxDiv = section.children[0];
+          if (!parallaxDiv) return;
+          var baseImg = parallaxDiv.querySelector('img');
+          if (!baseImg) return;
+          section.__carouselDone = true;
+
+          newPhotos.forEach(function (src) {
+            var img = document.createElement('img');
+            img.src  = src; img.alt = '';
+            img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center;opacity:0;transition:opacity 0.75s cubic-bezier(0.4,0,0.2,1);pointer-events:none;will-change:opacity;';
+            parallaxDiv.appendChild(img);
+          });
+
+          var total = 1 + newPhotos.length, current = 0;
+          var dotsWrap = document.createElement('div');
+          dotsWrap.style.cssText = 'position:absolute;bottom:72px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:10px;z-index:30;pointer-events:auto;';
+
+          for (var d = 0; d < total; d++) {
+            (function (idx) {
+              var dot = document.createElement('span');
+              dot.style.cssText = 'display:block;height:5px;border-radius:3px;cursor:pointer;background:rgba(255,255,255,' + (idx===0?'0.95':'0.35') + ');width:' + (idx===0?'22px':'6px') + ';transition:all 0.35s ease;';
+              dot.addEventListener('click', function () { goTo(idx); });
+              dotsWrap.appendChild(dot);
+            })(d);
+          }
+          section.appendChild(dotsWrap);
+
+          function updateDots() {
+            Array.from(dotsWrap.children).forEach(function (dot, i) {
+              dot.style.background = 'rgba(255,255,255,' + (i===current?'0.95':'0.35') + ')';
+              dot.style.width = i===current ? '22px' : '6px';
+            });
+          }
+          function goTo(idx) {
+            idx = ((idx % total) + total) % total;
+            Array.from(parallaxDiv.children).slice(1).forEach(function (img, i) { img.style.opacity = i===idx-1?'1':'0'; });
+            current = idx; updateDots();
+          }
+          var autoTimer = setInterval(function () { goTo(current + 1); }, 4000);
+          function resetTimer() { clearInterval(autoTimer); autoTimer = setInterval(function () { goTo(current + 1); }, 4000); }
+          var touchX = 0;
+          section.addEventListener('touchstart', function (e) { touchX = e.touches[0].clientX; }, { passive: true });
+          section.addEventListener('touchend', function (e) {
+            var diff = touchX - e.changedTouches[0].clientX;
+            if (Math.abs(diff) > 55) { goTo(current + (diff > 0 ? 1 : -1)); resetTimer(); }
+          }, { passive: true });
+          var mouseX = 0, dragging = false;
+          section.addEventListener('mousedown', function (e) { mouseX = e.clientX; dragging = true; });
+          section.addEventListener('mouseup',   function (e) {
+            if (!dragging) return; dragging = false;
+            var diff = mouseX - e.clientX;
+            if (Math.abs(diff) > 55) { goTo(current + (diff > 0 ? 1 : -1)); resetTimer(); }
+          });
+          section.addEventListener('mouseleave', function () { dragging = false; });
+        }
+
+        function tryInit() {
+          var wf = document.getElementById('water-features');
+          if (!wf || wf.children.length < 3) { requestAnimationFrame(tryInit); return; }
+          var kids = wf.children;
+          if (!kids[0].querySelector('img') || !kids[1].querySelector('img') || !kids[2].querySelector('img')) { requestAnimationFrame(tryInit); return; }
+          buildCarousel(kids[0], OUTDOOR);
+          buildCarousel(kids[1], INDOOR);
+          buildCarousel(kids[2], SAUNA);
+        }
+        if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', tryInit); } else { tryInit(); }
+      })();
+    </script>
+    <link rel="stylesheet" href="/assets/index-gvK2ak0g.css">
+
+    <style>
+      html { scroll-behavior: smooth; }
+      /* ═══════════════════════════════════════════════════════════════════
+         iOS Safari black-screen fix
+         Framer Motion sets will-change:transform + transform:scale(1.08/1.1)
+         translateY(Xpx) as INLINE styles at 60fps via MotionValues.
+         CSS !important in a stylesheet beats inline styles in the cascade
+         (author-important > author-normal which includes inline).
+         Combined with the prototype intercept above this gives two layers
+         of protection, ensuring the iOS GPU compositor never receives a
+         will-change or large-scale transform on these big parallax elements.
+         ═══════════════════════════════════════════════════════════════════ */
+
+      /* Layer A: Remove will-change from every element (prototype intercept
+         is primary; this is the CSS fallback) */
+      html.is-ios * {
+        will-change: auto !important;
+      }
+
+      /* Layer B: Kill the Framer Motion transform on the HERO parallax container
+         (motion.div.scale-[1.08] with live y MotionValue inside section#home) */
+      html.is-ios section#home .will-change-transform,
+      html.is-ios section#home .will-change-transform > * {
+        transform: none !important;
+      }
+
+      /* Layer C: Kill the Framer Motion transform on ROOM CARD parallax containers
+         (motion.div.scale-110 with live y MotionValue — used in ParallaxHero) */
+      html.is-ios .scale-\[1\.08\],
+      html.is-ios .scale-110,
+      html.is-ios .scale-\[1\.1\] {
+        transform: none !important;
+      }
+
+      /* Layer D: Kill the restaurant motion.img parallax
+         (motion.img.h-[115%] with live y MotionValue inside section#restaurant) */
+      html.is-ios section#restaurant .h-\[115\%\] {
+        transform: none !important;
+      }
+
+      /* Layer E: Bar & Kids hero images added by index.html parallax JS */
+      html.is-ios #bar-hero-img,
+      html.is-ios #kids-hero-img {
+        transform: none !important;
+      }
+
+
+      /* iOS Safari compatibility */
+      * { -webkit-tap-highlight-color: transparent; }
+
+      @keyframes barTickerAnim { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="/assets/index-CfSjvk7-.js"></script>
+
+    <!-- ── Reversed-Ə shrink ─────────────────────────────────────────── -->
+    <script>
+      (function shrinkReversedE() {
+        function wrapReversedE(node) {
+          if (node.nodeType === 3) {
+            var text = node.nodeValue;
+            if (text && text.indexOf('\u018E') !== -1) {
+              var parts = text.split('\u018E'), frag = document.createDocumentFragment();
+              for (var i = 0; i < parts.length; i++) {
+                if (parts[i]) frag.appendChild(document.createTextNode(parts[i]));
+                if (i < parts.length - 1) {
+                  var span = document.createElement('span');
+                  span.textContent = '\u018E';
+                  span.style.cssText = 'font-size:0.88em;vertical-align:baseline;';
+                  frag.appendChild(span);
+                }
+              }
+              node.parentNode.replaceChild(frag, node);
+            }
+          } else if (node.nodeType === 1 && node.tagName !== 'SCRIPT' && node.tagName !== 'STYLE') {
+            Array.from(node.childNodes).forEach(wrapReversedE);
+          }
+        }
+        function run() {
+          wrapReversedE(document.body);
+          var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) { m.addedNodes.forEach(wrapReversedE); });
+          });
+          observer.observe(document.body, { childList: true, subtree: true });
+        }
+        if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', run); } else { run(); }
+      })();
+    </script>
+
+    <!-- ── Instagram section: handled by injectBarAndGallery below ──── -->
+
+    <!-- ── Restaurant gallery extra photo + Bar section ─────────────── -->
+    <script>
+    (function injectBarAndGallery() {
+      'use strict';
+
+      var BAR_TEXTS = {
+        hy: {
+          label: 'Բար',
+          title:  'Բար',
+          subtitle: 'Ձեր հանգիստը հասնում է կատարելության Getap-ի բարում: Ընտրված գինիներ, հայկական կոնյակ, ձեռագործ կոկտեյլներ — ամեն գավաթ ստեղծված է ձեր պահի համար:',
+          ticker: 'Բար  ·  Կոնյակ  ·  Ձեռագործ Կոկտեյլ  ·  Ընտրյալ Գինիներ  ·  Getap Resort  · '
+        },
+        ru: {
+          label: 'Бар',
+          title:  'Бар',
+          subtitle: 'Завершите день в баре Getap — там, где отборные вина, армянский коньяк и авторские коктейли встречаются с тишиной горного вечера.',
+          ticker: 'Бар  ·  Коньяк  ·  Авторские Коктейли  ·  Отборные Вина  ·  Getap Resort  · '
+        },
+        en: {
+          label: 'Bar',
+          title:  'Bar',
+          subtitle: 'End your day at the Getap Bar — where fine wines, Armenian brandy and handcrafted cocktails meet the stillness of a mountain evening.',
+          ticker: 'Bar  ·  Brandy  ·  Handcrafted Cocktails  ·  Fine Wines  ·  Getap Resort  · '
+        }
+      };
+
+      var KIDS_TEXTS = {
+        hy: {
+          label: 'Մանկական Գոտի',
+          title: 'Մանկական<br>Գոտի',
+          subtitle: 'Getap-ում փոքրերն ևս ունեն իրենց աշխարհը: Մանկական գոտին լի է ժամանցով ու երևակայությամբ — ծնողներն ազատ են կատարյալ հանգիստ վայելելու:',
+          ticker: 'Մանկական Գոտի  ·  Ալտ-Հոկէյ  ·  Խաղային Ավտոմատ  ·  Softe Play  ·  Getap Resort  · '
+        },
+        ru: {
+          label: 'Детская зона',
+          title: 'Детская<br>зона',
+          subtitle: 'В Getap и самые маленькие гости найдут своё пространство. Детская зона с играми и развлечениями позволяет родителям по-настоящему отдохнуть.',
+          ticker: 'Детская Зона  ·  Аэрохоккей  ·  Игровые Автоматы  ·  Мягкие Горки  ·  Getap Resort  · '
+        },
+        en: {
+          label: 'Kids Zone',
+          title: 'Kids<br>Zone',
+          subtitle: 'At Getap, the little ones have a world of their own. A dedicated kids zone filled with activity and imagination gives parents the peace of mind to truly relax.',
+          ticker: 'Kids Zone  ·  Air Hockey  ·  Arcade Games  ·  Soft Play  ·  Getap Resort  · '
+        }
+      };
+
+      /* Reliable detection using Unicode ranges:
+         Armenian: U+0531–U+058F  |  Cyrillic: U+0400–U+04FF  |  else → English */
+      function detectLang() {
+        var restSec = document.getElementById('restaurant');
+        if (!restSec) return 'hy';
+        var label = restSec.querySelector('.section-label');
+        if (!label) return 'hy';
+        var t = (label.textContent || '').trim();
+        if (/[\u0531-\u058F\u0561-\u0587]/.test(t)) return 'hy';
+        if (/[\u0400-\u04FF]/.test(t)) return 'ru';
+        return 'en';
+      }
+
+      function updateBarLang(lang) {
+        var texts = BAR_TEXTS[lang] || BAR_TEXTS.hy;
+        var label    = document.getElementById('bar-label');
+        var title    = document.getElementById('bar-title');
+        var subtitle = document.getElementById('bar-subtitle');
+        var ticker   = document.getElementById('bar-ticker');
+        if (label)    label.textContent  = texts.label;
+        if (title)    title.innerHTML    = texts.title;
+        if (subtitle) subtitle.textContent = texts.subtitle;
+        if (ticker) {
+          ticker.innerHTML = '';
+          for (var i = 0; i < 16; i++) {
+            var sp = document.createElement('span');
+            sp.style.cssText = 'font-family:Outfit,sans-serif;font-size:10.5px;letter-spacing:0.3em;text-transform:uppercase;color:hsl(220,22%,5%);flex-shrink:0;opacity:0.75';
+            sp.textContent = texts.ticker;
+            ticker.appendChild(sp);
+          }
+        }
+      }
+
+      function updateKidsLang(lang) {
+        var texts    = KIDS_TEXTS[lang] || KIDS_TEXTS.hy;
+        var label    = document.getElementById('kids-label');
+        var title    = document.getElementById('kids-title');
+        var subtitle = document.getElementById('kids-subtitle');
+        var ticker   = document.getElementById('kids-ticker');
+        if (label)    label.textContent    = texts.label;
+        if (title)    title.innerHTML      = texts.title;
+        if (subtitle) subtitle.textContent = texts.subtitle;
+        if (ticker) {
+          ticker.innerHTML = '';
+          for (var i = 0; i < 16; i++) {
+            var sp = document.createElement('span');
+            sp.style.cssText = 'font-family:Outfit,sans-serif;font-size:10.5px;letter-spacing:0.3em;text-transform:uppercase;color:hsl(42,72%,52%);flex-shrink:0;opacity:0.85';
+            sp.textContent = texts.ticker;
+            ticker.appendChild(sp);
+          }
+        }
+      }
+
+      /* ── Build Kids Zone section (visually related to bar but mirrored) ── */
+      function buildKidsSection(lang) {
+        var texts = KIDS_TEXTS[lang] || KIDS_TEXTS.hy;
+        var BG = 'hsl(220,22%,5%)';
+
+        var section = document.createElement('section');
+        section.id = 'kids-zone';
+        section.style.cssText = 'background:' + BG + ';overflow:hidden';
+
+        /* —— Top decorative ticker strip (dark bg, gold text — inverted from bar) ——*/
+        var topStrip = document.createElement('div');
+        topStrip.style.cssText = 'width:100%;overflow:hidden;background:hsl(220,22%,8%);border-top:1px solid rgba(255,255,255,0.07);border-bottom:1px solid rgba(255,255,255,0.07)';
+        var topInner = document.createElement('div');
+        topInner.id = 'kids-ticker';
+        topInner.style.cssText = 'display:flex;gap:0;white-space:nowrap;padding:14px 0;animation:barTickerAnim 38s linear infinite';
+        for (var i = 0; i < 16; i++) {
+          var sp = document.createElement('span');
+          sp.style.cssText = 'font-family:Outfit,sans-serif;font-size:10.5px;letter-spacing:0.3em;text-transform:uppercase;color:hsl(42,72%,52%);flex-shrink:0;opacity:0.85';
+          sp.textContent = texts.ticker;
+          topInner.appendChild(sp);
+        }
+        topStrip.appendChild(topInner);
+        section.appendChild(topStrip);
+
+        /* —— Hero image block ——————————————————————————————— */
+        var hero = document.createElement('div');
+        hero.style.cssText = 'position:relative;width:100%;height:100vh;overflow:hidden';
+
+        var img = document.createElement('img');
+        img.id  = 'kids-hero-img';
+        img.src = '/assets/Getap__34_(5)_1778420701505.JPG';
+        img.alt = 'Kids Zone at Getap Resort';
+        img.style.cssText = 'position:absolute;inset:0;width:100%;height:115%;object-fit:cover;object-position:center top';
+        hero.appendChild(img);
+
+        /* gradients — slightly different angle for variety */
+        var grad = document.createElement('div');
+        grad.style.cssText = 'position:absolute;inset:0;background:linear-gradient(to bottom,hsla(220,22%,5%,0.55) 0%,transparent 35%,hsla(220,22%,5%,0.85) 100%)';
+        hero.appendChild(grad);
+
+        var sideGrad = document.createElement('div');
+        sideGrad.style.cssText = 'position:absolute;inset:0;background:linear-gradient(to left,hsla(220,22%,5%,0.75) 0%,transparent 55%)';
+        hero.appendChild(sideGrad);
+
+        /* —— Right-side text (mirrored from bar's left) ——— */
+        var rightWrap = document.createElement('div');
+        rightWrap.style.cssText = 'position:absolute;top:50%;right:2.5rem;transform:translateY(-50%);z-index:10;text-align:right';
+
+        var rightInner = document.createElement('div');
+        rightInner.id = 'kids-right-inner';
+        rightInner.style.cssText = 'display:flex;flex-direction:column;align-items:flex-end;gap:1.5rem;opacity:0;transform:translateX(30px);transition:opacity 0.8s ease,transform 0.8s ease';
+
+        var labelEl = document.createElement('p');
+        labelEl.id = 'kids-label';
+        labelEl.className = 'section-label';
+        labelEl.style.marginBottom = '1rem';
+        labelEl.textContent = texts.label;
+
+        /* gold line — right-aligned */
+        var goldLine = document.createElement('div');
+        goldLine.className = 'gold-line';
+        goldLine.style.cssText = 'margin-bottom:1.75rem;margin-left:auto';
+
+        var titleEl = document.createElement('h2');
+        titleEl.id = 'kids-title';
+        titleEl.style.cssText = "font-family:'DM Serif Display',serif;color:#fff;line-height:1;font-size:clamp(2.5rem,6vw,6rem);text-align:right";
+        titleEl.innerHTML = texts.title;
+
+        rightInner.appendChild(labelEl);
+        rightInner.appendChild(goldLine);
+        rightInner.appendChild(titleEl);
+        rightWrap.appendChild(rightInner);
+        hero.appendChild(rightWrap);
+
+        /* —— Bottom-left subtitle (mirrored from bar's bottom-right) ——— */
+        var leftWrap = document.createElement('div');
+        leftWrap.style.cssText = 'position:absolute;bottom:2.5rem;left:2.5rem;z-index:10;max-width:20rem;text-align:left';
+
+        var leftInner = document.createElement('div');
+        leftInner.id = 'kids-left-inner';
+        leftInner.style.cssText = 'opacity:0;transform:translateY(20px);transition:opacity 0.8s 0.4s ease,transform 0.8s 0.4s ease';
+
+        var subtitleEl = document.createElement('p');
+        subtitleEl.id = 'kids-subtitle';
+        subtitleEl.style.cssText = 'color:rgba(255,255,255,0.78);font-family:Outfit,sans-serif;font-size:0.875rem;line-height:1.75;font-weight:300';
+        subtitleEl.textContent = texts.subtitle;
+
+        leftInner.appendChild(subtitleEl);
+        leftWrap.appendChild(leftInner);
+        hero.appendChild(leftWrap);
+
+        section.appendChild(hero);
+        return section;
+      }
+
+      function setupKidsParallax() {
+        if (window._isIOS) return;
+        var hero = document.querySelector('#kids-zone > div:nth-child(2)');
+        var img  = document.getElementById('kids-hero-img');
+        if (!hero || !img) return;
+        window.addEventListener('scroll', function () {
+          var rect = hero.getBoundingClientRect();
+          if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+          var progress = -rect.top / window.innerHeight;
+          img.style.transform = 'translate3d(0,' + (progress * window.innerHeight * 0.25) + 'px,0)';
+        }, { passive: true });
+      }
+
+      function setupKidsAnimations() {
+        var kidsSec = document.getElementById('kids-zone');
+        if (!kidsSec) return;
+        var obs = new IntersectionObserver(function (entries) {
+          if (!entries[0].isIntersecting) return;
+          var r = document.getElementById('kids-right-inner');
+          var l = document.getElementById('kids-left-inner');
+          if (r) { r.style.opacity = '1'; r.style.transform = 'translateX(0)'; }
+          if (l) { l.style.opacity = '1'; l.style.transform = 'translateY(0)'; }
+          obs.disconnect();
+        }, { threshold: 0.15 });
+        obs.observe(kidsSec);
+      }
+
+      /* ── Add the new food photo to restaurant gallery ── */
+      function injectFoodPhoto(restSec) {
+        if (restSec.__foodInjected) return;
+        var grid = restSec.querySelector('[class*="grid-cols"]');
+        if (!grid) return;
+        restSec.__foodInjected = true;
+
+        var item = document.createElement('div');
+        item.style.cssText = 'overflow:hidden;aspect-ratio:4/3;opacity:0;transform:translateY(30px);transition:opacity 0.7s ease,transform 0.7s ease';
+
+        var img = document.createElement('img');
+        img.src = '/assets/Getap__71_(3)_1778418631428.JPG';
+        img.alt = 'Restaurant food';
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover;transition:transform 0.6s ease';
+        img.addEventListener('mouseover', function () { this.style.transform = 'scale(1.07)'; });
+        img.addEventListener('mouseout',  function () { this.style.transform = 'scale(1)'; });
+        item.appendChild(img);
+        grid.appendChild(item);
+
+        var obs = new IntersectionObserver(function (entries) {
+          if (entries[0].isIntersecting) {
+            item.style.opacity = '1';
+            item.style.transform = 'translateY(0)';
+            obs.disconnect();
+          }
+        }, { threshold: 0.05 });
+        obs.observe(item);
+      }
+
+      /* ── Build the full bar section ── */
+      function buildBarSection(lang) {
+        var texts = BAR_TEXTS[lang] || BAR_TEXTS.hy;
+        var BG  = 'hsl(220,22%,5%)';
+        var GOLD = 'hsl(42,72%,52%)';
+
+        var section = document.createElement('section');
+        section.id = 'bar';
+        section.style.cssText = 'background:' + BG + ';overflow:hidden';
+
+        /* —— Hero ——————————————————————————————————————————— */
+        var hero = document.createElement('div');
+        hero.style.cssText = 'position:relative;width:100%;height:100vh;overflow:hidden';
+
+        var img = document.createElement('img');
+        img.id  = 'bar-hero-img';
+        img.src = '/assets/Getap__72_(2)_1778418631430.JPG';
+        img.alt = 'Bar & Lounge at Getap Resort';
+        img.style.cssText = 'position:absolute;inset:0;width:100%;height:115%;object-fit:cover;object-position:center';
+        hero.appendChild(img);
+
+        var darkOverlay = document.createElement('div');
+        darkOverlay.id = 'bar-dark-overlay';
+        darkOverlay.style.cssText = 'position:absolute;inset:0;background:rgba(0,0,0,0);transition:background 0.1s linear';
+        hero.appendChild(darkOverlay);
+
+        var grad = document.createElement('div');
+        grad.style.cssText = 'position:absolute;inset:0;background:linear-gradient(to bottom,hsla(220,22%,5%,0.6) 0%,transparent 40%,hsla(220,22%,5%,0.9) 100%)';
+        hero.appendChild(grad);
+
+        /* Left overlay text — matches restaurant layout exactly */
+        var leftWrap = document.createElement('div');
+        leftWrap.style.cssText = 'position:absolute;top:50%;left:2rem;transform:translateY(-50%);z-index:10';
+
+        var leftInner = document.createElement('div');
+        leftInner.id = 'bar-left-inner';
+        leftInner.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:1.5rem;opacity:0;transform:translateX(-30px);transition:opacity 0.8s ease,transform 0.8s ease';
+
+        var labelEl = document.createElement('p');
+        labelEl.id = 'bar-label';
+        labelEl.className = 'section-label';
+        labelEl.style.marginBottom = '1rem';
+        labelEl.textContent = texts.label;
+
+        var goldLine = document.createElement('div');
+        goldLine.className = 'gold-line';
+        goldLine.style.marginBottom = '1.75rem';
+
+        var titleEl = document.createElement('h2');
+        titleEl.id = 'bar-title';
+        titleEl.style.cssText = "font-family:'DM Serif Display',serif;color:#fff;line-height:1;font-size:clamp(2.5rem,6vw,6rem)";
+        titleEl.innerHTML = texts.title;
+
+        leftInner.appendChild(goldLine);
+        leftInner.appendChild(titleEl);
+        leftWrap.appendChild(leftInner);
+        hero.appendChild(leftWrap);
+
+        /* Right / bottom subtitle */
+        var rightWrap = document.createElement('div');
+        rightWrap.style.cssText = 'position:absolute;bottom:2.5rem;right:2rem;z-index:10;max-width:20rem;text-align:right';
+
+        var rightInner = document.createElement('div');
+        rightInner.id = 'bar-right-inner';
+        rightInner.style.cssText = 'opacity:0;transform:translateY(20px);transition:opacity 0.8s 0.4s ease,transform 0.8s 0.4s ease';
+
+        var subtitleEl = document.createElement('p');
+        subtitleEl.id = 'bar-subtitle';
+        subtitleEl.style.cssText = "font-family:Outfit,sans-serif;color:rgba(255,255,255,0.6);font-size:clamp(0.875rem,1.2vw,1rem);line-height:1.7";
+        subtitleEl.textContent = texts.subtitle;
+
+        rightInner.appendChild(subtitleEl);
+        rightWrap.appendChild(rightInner);
+        hero.appendChild(rightWrap);
+
+        section.appendChild(hero);
+
+        /* —— Scrolling gold ticker strip ——————————————————— */
+        var tickerWrap = document.createElement('div');
+        tickerWrap.style.cssText = 'background:' + GOLD + ';overflow:hidden;padding:1rem 0;user-select:none';
+
+        var ticker = document.createElement('div');
+        ticker.id = 'bar-ticker';
+        ticker.style.cssText = 'display:flex;white-space:nowrap;gap:2.5rem;animation:barTickerAnim 28s linear infinite';
+
+        for (var i = 0; i < 16; i++) {
+          var sp = document.createElement('span');
+          sp.style.cssText = 'font-family:Outfit,sans-serif;font-size:10.5px;letter-spacing:0.3em;text-transform:uppercase;color:hsl(220,22%,5%);flex-shrink:0;opacity:0.75';
+          sp.textContent = texts.ticker;
+          ticker.appendChild(sp);
+        }
+
+        tickerWrap.appendChild(ticker);
+        section.appendChild(tickerWrap);
+
+        return section;
+      }
+
+      /* ── Parallax scroll for bar hero ── */
+      function setupBarParallax() {
+        if (window._isIOS) return;
+        var hero    = document.querySelector('#bar > div:first-child');
+        var img     = document.getElementById('bar-hero-img');
+        var overlay = document.getElementById('bar-dark-overlay');
+        if (!hero || !img) return;
+
+        window.addEventListener('scroll', function () {
+          var rect = hero.getBoundingClientRect();
+          if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+          var progress  = -rect.top / window.innerHeight;
+          var yOffset   = progress * window.innerHeight * 0.25;
+          img.style.transform = 'translate3d(0,' + yOffset + 'px,0)';
+          var opacity = Math.min(0.4, Math.max(0, (progress - 0.1) * 0.5));
+          overlay.style.background = 'rgba(0,0,0,' + opacity + ')';
+        }, { passive: true });
+      }
+
+      /* ── IntersectionObserver: animate text in on scroll ── */
+      function setupBarAnimations() {
+        var barSec = document.getElementById('bar');
+        if (!barSec) return;
+        var obs = new IntersectionObserver(function (entries) {
+          if (!entries[0].isIntersecting) return;
+          var l = document.getElementById('bar-left-inner');
+          var r = document.getElementById('bar-right-inner');
+          if (l) { l.style.opacity = '1'; l.style.transform = 'translateX(0)'; }
+          if (r) { r.style.opacity = '1'; r.style.transform = 'translateY(0)'; }
+          obs.disconnect();
+        }, { threshold: 0.15 });
+        obs.observe(barSec);
+      }
+
+      var IG_TEXTS = {
+        hy: {
+          label:     'Սոց. Ցանց',
+          tagline:   'Հետևեք մեզ Instagram-ում՝ հայ բնությամբ ոգեշնչված պահերի, հանգստի և անձնական պատմությունների համար:',
+          followers: 'Հետևորդ',
+          btn:       'Հետևել Instagram-ում',
+          ticker:    'Instagram  ·  @getap_resort_arzni  ·  Getap Resort  ·  Arzni  · '
+        },
+        ru: {
+          label:     'Соц. сети',
+          tagline:   'Следите за нами в Instagram — горные пейзажи, курортная жизнь и сезонные истории из Арзни.',
+          followers: 'Подписчики',
+          btn:       'Смотреть в Instagram',
+          ticker:    'Instagram  ·  @getap_resort_arzni  ·  Getap Resort  ·  Арзни  · '
+        },
+        en: {
+          label:     'Social',
+          tagline:   'Follow us on Instagram for mountain moments, resort life and seasonal stories from Arzni.',
+          followers: 'Followers',
+          btn:       'Follow on Instagram',
+          ticker:    'Instagram  ·  @getap_resort_arzni  ·  Getap Resort  ·  Arzni  · '
+        }
+      };
+
+      function updateIgLang(lang) {
+        var texts = IG_TEXTS[lang] || IG_TEXTS.hy;
+        var label   = document.getElementById('ig-new-label');
+        var tagline = document.getElementById('ig-new-tagline');
+        var btn     = document.getElementById('ig-new-btn');
+        if (label)   label.textContent   = texts.label;
+        if (tagline) tagline.textContent = texts.tagline;
+        if (btn)     btn.textContent     = texts.btn;
+      }
+
+      function fmtFollowers(n) {
+        if (!n || isNaN(n)) return null;
+        if (n >= 1000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+        if (n >= 10000)   return Math.round(n / 1000) + 'K';
+        if (n >= 1000)    return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+        return String(n);
+      }
+
+      function animateCount(el, target) {
+        var start = 0, duration = 1800, startTime = null;
+        function step(ts) {
+          if (!startTime) startTime = ts;
+          var pct = Math.min((ts - startTime) / duration, 1);
+          var ease = 1 - Math.pow(1 - pct, 3);
+          el.textContent = fmtFollowers(Math.floor(start + (target - start) * ease)) || '—';
+          if (pct < 1) requestAnimationFrame(step);
+          else el.textContent = fmtFollowers(target) || '—';
+        }
+        requestAnimationFrame(step);
+      }
+
+      /* ── Build new Instagram section (no photos — centered editorial) ── */
+      function buildInstagramSection(lang) {
+        var texts = IG_TEXTS[lang] || IG_TEXTS.hy;
+        var BG   = 'hsl(220,22%,5%)';
+        var GOLD = 'hsl(42,72%,52%)';
+
+        var section = document.createElement('section');
+        section.id = 'instagram-v2';
+        section.style.cssText = 'background:' + BG + ';overflow:hidden;position:relative';
+
+        /* ── Top scrolling ticker strip ── */
+        var topStrip = document.createElement('div');
+        topStrip.style.cssText = 'width:100%;overflow:hidden;background:hsl(220,22%,8%);border-top:1px solid rgba(255,255,255,0.07);border-bottom:1px solid rgba(255,255,255,0.07)';
+        var topInner = document.createElement('div');
+        topInner.id = 'ig-ticker';
+        topInner.style.cssText = 'display:flex;gap:0;white-space:nowrap;padding:14px 0;animation:barTickerAnim 40s linear infinite';
+        for (var ti = 0; ti < 20; ti++) {
+          var tsp = document.createElement('span');
+          tsp.style.cssText = 'font-family:Outfit,sans-serif;font-size:10.5px;letter-spacing:0.28em;text-transform:uppercase;color:rgba(225,48,108,0.65);flex-shrink:0';
+          tsp.textContent = texts.ticker;
+          topInner.appendChild(tsp);
+        }
+        topStrip.appendChild(topInner);
+        section.appendChild(topStrip);
+
+        /* ── Ambient Instagram gradient glow ── */
+        var glow = document.createElement('div');
+        glow.style.cssText = 'position:absolute;inset:0;pointer-events:none;opacity:0.1;background:radial-gradient(ellipse 70% 70% at 50% 50%,#c13584 0%,#e1306c 30%,#f77737 65%,transparent 100%)';
+        section.appendChild(glow);
+
+        /* ── Centered content wrapper ── */
+        var wrap = document.createElement('div');
+        wrap.id = 'ig-new-wrap';
+        wrap.style.cssText = [
+          'position:relative;z-index:1;',
+          'display:flex;flex-direction:column;align-items:center;text-align:center;',
+          'padding:6rem 2rem 7rem;',
+          'opacity:0;transform:translateY(32px);',
+          'transition:opacity 0.9s ease,transform 0.9s ease'
+        ].join('');
+
+        /* Section label */
+        var labelEl = document.createElement('p');
+        labelEl.id = 'ig-new-label';
+        labelEl.className = 'section-label';
+        labelEl.style.marginBottom = '1.75rem';
+        labelEl.textContent = texts.label;
+        wrap.appendChild(labelEl);
+
+        /* Instagram gradient icon */
+        var iconWrap = document.createElement('div');
+        iconWrap.style.cssText = 'width:64px;height:64px;margin-bottom:2rem;flex-shrink:0';
+        iconWrap.innerHTML = '<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><defs><radialGradient id="igG3" cx="30%" cy="107%" r="130%"><stop offset="0%" stop-color="#fdf497"/><stop offset="10%" stop-color="#fdf497"/><stop offset="28%" stop-color="#fd5949"/><stop offset="53%" stop-color="#d6249f"/><stop offset="74%" stop-color="#285AEB"/></radialGradient></defs><rect x="2" y="2" width="44" height="44" rx="12" fill="url(#igG3)"/><circle cx="24" cy="24" r="10" stroke="white" stroke-width="2.8" fill="none"/><circle cx="35" cy="13" r="2.5" fill="white"/></svg>';
+        wrap.appendChild(iconWrap);
+
+        /* Handle */
+        var handleEl = document.createElement('h2');
+        handleEl.style.cssText = "font-family:'DM Serif Display',serif;color:#fff;font-size:clamp(1.8rem,4vw,3rem);letter-spacing:0.01em;margin-bottom:1.25rem;line-height:1.1";
+        handleEl.textContent = '@getap_resort_arzni';
+        wrap.appendChild(handleEl);
+
+        /* Gold divider */
+        var goldDiv = document.createElement('div');
+        goldDiv.className = 'gold-line';
+        goldDiv.style.cssText = 'margin:0 auto 2.5rem';
+        wrap.appendChild(goldDiv);
+
+        /* (live counter removed) */
+
+        /* Tagline */
+        var taglineEl = document.createElement('p');
+        taglineEl.id = 'ig-new-tagline';
+        taglineEl.style.cssText = 'font-family:Outfit,sans-serif;font-size:0.95rem;line-height:1.8;color:rgba(255,255,255,0.55);margin-bottom:2.75rem;max-width:440px';
+        taglineEl.textContent = texts.tagline;
+        wrap.appendChild(taglineEl);
+
+        /* CTA button */
+        var btn = document.createElement('a');
+        btn.id = 'ig-new-btn';
+        btn.href = 'https://www.instagram.com/getap_resort_arzni/';
+        btn.target = '_blank';
+        btn.rel = 'noopener noreferrer';
+        btn.textContent = texts.btn;
+        btn.style.cssText = [
+          'display:inline-flex;align-items:center;gap:0.6rem;',
+          'padding:0.9rem 2.5rem;',
+          'font-family:Outfit,sans-serif;font-size:0.78rem;letter-spacing:0.16em;text-transform:uppercase;text-decoration:none;',
+          'border:1px solid ' + GOLD + ';color:' + GOLD + ';',
+          'background:transparent;',
+          'transition:background 0.28s ease,color 0.28s ease'
+        ].join('');
+        btn.addEventListener('mouseenter', function() { btn.style.background = GOLD; btn.style.color = BG; });
+        btn.addEventListener('mouseleave', function() { btn.style.background = 'transparent'; btn.style.color = GOLD; });
+        wrap.appendChild(btn);
+
+        section.appendChild(wrap);
+        return section;
+      }
+
+      function setupInstagramSection() {
+        var old = document.getElementById('instagram');
+        if (old) old.style.display = 'none';
+
+        var newSec = document.getElementById('instagram-v2');
+        if (!newSec) return;
+
+        var wrap = document.getElementById('ig-new-wrap');
+
+        var obs = new IntersectionObserver(function(entries) {
+          if (!entries[0].isIntersecting) return;
+          if (wrap) { wrap.style.opacity = '1'; wrap.style.transform = 'translateY(0)'; }
+
+          obs.disconnect();
+        }, { threshold: 0.12 });
+        obs.observe(newSec);
+
+        if (window.innerWidth <= 768 && wrap) {
+          wrap.style.opacity = '1'; wrap.style.transform = 'none';
+        }
+      }
+
+      /* ── Watch for language changes ── */
+      /* Primary: intercept clicks on language switcher buttons in the nav.
+         The bundle uses short labels "ՀԱՅ" / "РУС" / "ENG" and language codes
+         "hy" / "ru" / "en" — match by detecting Unicode script of the button text.
+         Fallback: MutationObserver on the restaurant section label. */
+      function watchLangChange() {
+        /* Click intercept — fires immediately when user picks a language */
+        document.addEventListener('click', function (e) {
+          var btn = e.target && e.target.closest('button');
+          if (!btn) return;
+          var txt = (btn.textContent || '').trim();
+          var lang = null;
+          if (/[\u0531-\u058F\u0561-\u0587]/.test(txt)) lang = 'hy';  /* Armenian chars */
+          else if (/[\u0400-\u04FF]/.test(txt)) lang = 'ru';           /* Cyrillic chars */
+          else if (/\bENG\b|\bEnglish\b/i.test(txt)) lang = 'en';
+          if (lang) {
+            /* Wait one frame for React to re-render, then apply */
+            requestAnimationFrame(function () { updateBarLang(lang); updateKidsLang(lang); updateIgLang(lang); });
+          }
+        }, true); /* capture phase so we run before React handlers */
+
+        /* Fallback MutationObserver — catches any re-render of the restaurant label */
+        var restSec = document.getElementById('restaurant');
+        if (!restSec) return;
+        var lastLang = detectLang();
+        var mo = new MutationObserver(function () {
+          var newLang = detectLang();
+          if (newLang !== lastLang) { lastLang = newLang; updateBarLang(newLang); updateKidsLang(newLang); updateIgLang(newLang); }
+        });
+        mo.observe(restSec, { subtree: true, childList: true, characterData: true });
+      }
+
+      /* ── Main init loop (wait for React to render #restaurant) ── */
+      function init() {
+        var restSec = document.getElementById('restaurant');
+        if (!restSec || !restSec.querySelector('img')) {
+          requestAnimationFrame(init);
+          return;
+        }
+
+        injectFoodPhoto(restSec);
+
+        if (!document.getElementById('bar')) {
+          var lang   = detectLang();
+          var barSec = buildBarSection(lang);
+          restSec.parentNode.insertBefore(barSec, restSec.nextSibling);
+          var kidsSec = buildKidsSection(lang);
+          barSec.parentNode.insertBefore(kidsSec, barSec.nextSibling);
+
+          /* Find original #instagram section and insert new one right before it */
+          var oldIg = document.getElementById('instagram');
+          if (oldIg && !document.getElementById('instagram-v2')) {
+            var igSec = buildInstagramSection(lang);
+            oldIg.parentNode.insertBefore(igSec, oldIg);
+          }
+
+          setTimeout(function () {
+            setupBarParallax();
+            setupBarAnimations();
+            setupKidsParallax();
+            setupKidsAnimations();
+            setupInstagramSection();
+            watchLangChange();
+          }, 120);
+        }
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', function () { requestAnimationFrame(init); });
+      } else {
+        requestAnimationFrame(init);
+      }
+    })();
+    </script>
+
+  </body>
+</html>
